@@ -343,33 +343,63 @@ function boot(){
   B.doClick=hit; B.go=go; B.use=use; B.notice=notice;
   score(); go('main');
   window.__OK=true;
+  /* Render sound status once the DOM exists. */
+  try{
+    var st=window.__SND_STATUS;
+    var el=document.getElementById('snd-status');
+    if(el){
+      if(st){ el.className=st.ok?'ok':'bad'; el.textContent=st.msg; }
+      else{ el.className='bad'; el.textContent='\u539F\u7248\u97F3\u6548\u672A\u52A0\u8F7D\uFF1A\u6587\u4EF6\u88AB\u622A\u65AD\uFF0C\u8BF7\u7528 Upload files \u4E0A\u4F20'; }
+    }
+  }catch(e){}
   })();
-  /* Sound glue: reads ORIGINAL byte-for-byte data from hidden HTML attributes.
-   Script stays tiny and pure ASCII. If data is truncated, logic layer beeps. */
+  /* Sound glue: prefers the inline original bytes; if the file was truncated,
+   it loads the same original mp3 files from this folder. Status is shown on screen. */
   (function(){
   "use strict";
+  function status(ok,msg){
+    window.__SND_STATUS={ok:ok,msg:msg};
+    try{
+      var el=document.getElementById('snd-status');
+      if(el){ el.className=ok?'ok':'bad'; el.textContent=msg; }
+    }catch(e){}
+  }
   function join(id){
     var ns=document.querySelectorAll('#'+id+' i'), o='';
     for(var i=0;i<ns.length;i++) o+=ns[i].getAttribute('data-s');
     return o;
   }
   var B=join('snd1'), C=join('snd2');
-  if(B.length<200 || C.length<200) return;
-  function pool(src,n){
+  var inline=(B.length===53783 && C.length===382743);
+  var srcB, srcC, label;
+  if(inline){ srcB=B; srcC=C; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D \u2713'; }
+  else{ srcB='bing.mp3'; srcC='combo.mp3'; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D\uFF08\u5916\u94FE\uFF09 \u2713'; }
+  function pool(src,n,k){
     var p=[];
     for(var i=0;i<n;i++){
-      try{ var a=new Audio(); a.src=src; a.preload='auto'; p.push(a); }catch(e){}
+      try{
+        var a=new Audio(); a.src=src; a.preload='auto';
+        a.addEventListener('error',function(){ bad[k]=true; });
+        p.push(a);
+      }catch(e){}
     }
     return p;
   }
-  var PB=pool(B,5), PC=pool(C,3), ib=0, ic=0;
+  var bad={bing:false,combo:false};
+  var PB=pool(srcB,5,'bing'), PC=pool(srcC,3,'combo'), ib=0, ic=0, failed=0;
+  status(true,label);
   window.SND=function(k){
+    if(bad[k]){ status(false,'\u539F\u7248\u97F3\u6548\u6587\u4EF6\u6CA1\u627E\u5230\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20'); return false; }
     try{
       var p=(k==='bing')?PB:PC, a=null;
       if(p.length) a=p[(k==='bing'?(++ib):(++ic))%p.length];
-      if(!a) a=new Audio(k==='bing'?B:C);
+      if(!a) a=new Audio(k==='bing'?srcB:srcC);
       a.pause(); if(a.readyState>0) a.currentTime=0;
-      var q=a.play(); if(q&&q.catch) q.catch(function(){});
+      var q=a.play();
+      if(q&&q.catch) q.catch(function(){
+        failed++;
+        if(failed>=2) status(false,'\u539F\u7248\u97F3\u6548\u64AD\u653E\u5931\u8D25\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20');
+      });
       return true;
     }catch(e){ return false; }
   };
@@ -489,6 +519,11 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 .list-bottom{padding:14px;text-align:center;font-size:13px;color:var(--b4);border-top:1px dashed var(--line);pointer-events:none;}
 
 /* 底部声明 */
+#snd-status{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:3300;
+  padding:5px 14px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.5px;
+  pointer-events:none;white-space:nowrap;display:none;}
+#snd-status.ok{display:block;background:rgba(20,90,60,.82);color:#b8ffdc;border:1px solid rgba(120,255,190,.5);}
+#snd-status.bad{display:block;background:rgba(150,50,20,.92);color:#ffe0c0;border:1px solid rgba(255,170,110,.6);}
 #site-note{position:fixed;left:0;right:0;bottom:0;z-index:3200;padding:12px 18px 14px;
   text-align:center;color:#a8d6ff;font-size:16px;font-weight:800;line-height:1.65;letter-spacing:.3px;
   text-shadow:0 0 12px rgba(60,160,255,.6);
@@ -500,6 +535,7 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 
 <div id="js-dead" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#c62828;color:#fff;font-size:12px;font-weight:800;padding:9px 12px;text-align:center;pointer-events:none;">脚本没跑起来（看到这行红字请截图）</div>
 <noscript><div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#ff8f00;color:#fff;font-size:13px;font-weight:800;padding:12px;text-align:center;">浏览器禁用了 JavaScript（常见于阅读模式 / 省流模式 / 广告过滤），请关闭后刷新</div></noscript>
+<div id="snd-status"></div>
 
 <div id="bg"></div>
 
@@ -548,4 +584,4 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 <!-- ORIGINAL audio, byte-for-byte, inline as base64 in hidden HTML attributes.
      Not inside any script, so editors do not flag the script block. -->
 <div id="snd1" style="display:none">
-<i data-s="data:audio/mpeg;base64,//vkZA4A+Xp3vDNYe3AAAA0gAAABK23g861rDcAAADSAAAAEIPMQUFHiQV8tIHCQmmuwGq0Ys0QTRpLCiYaKTQ0TDG0BQStY4LCYComlwh3QTJVAqAqpY6FLoipAzJUKBjIQl2hwi6yLY0WBEkkcaR4FlLDNaQwOhdH6AJxNR/jESgapcjAOdAmTPGNIyVQo2Ev/TyKaGuGmkKUBzLd04gkcnDpZIC4VpuyI4+DTbGVjQ5wWoSONJCU88QxcoCRPQFGsLJoQFQiFt5BRJ7tDp8cRzvjxiGgfcNqYTxaz+T6DLghCjUKIVirSEzgjkwhKUPw7FUkuulGiUywRjzUSTJKh7Y/QteOJQnoidEsPYwjtT6qRKTQtmXa0+HGXtlbWBbTypms5Kd+iDdPJXIsXFSwGBFKFIFyAATTkdl1jRBxgJ2V5gFAJIm0LiVgCrzMkTGPgV8KLZlEJVOmkPGVYjxUIqIHGALmDLErkySwxKkHCTKqDOCwoMQHDCww6w1BQ0YIwVgy4k1KYwOA2awSbgAkYAoQCRpwATotwM2lNqDBz8yAg3JUGFmqmJUrAAc8ggMSXNQlZOk4Y4MGFjOgF1hY8BiM/AAwVMwQXuu8qrLeqnDhpdMpVggdVBHGGkhF7rAE0yE77Nya+/Snb+lzV1JuqBzUEKnlr6VVSULVINg5WtQZ4JfArKlTt2cKkcBnMYamz9QNkb3Sh/2+m43A6+lcO3FKWdd+Aod04kCUzm50dO+UqjcRiTvVI7D8Lf6jkVuxN0kW7WmK96Wzzsx19pTMQLOzVNZkVNLuyyXUEzTco4Clsfyh+IdjTF4bkDxSl/4FnI7DF6POVPwzONch6JXqrsy2PurNXLnyulp4LeKo/kGJiCmopmXHJwXGSqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoPSHKMHDKAQ6jC+5tYAYPKqEyJkFQjGmAYLMal//vkZA4P+cN4OwNZe3AAAA0gAAABMZ3a3g5rDcAAADSAAAAEAJNwhJgLohG7pmDETKErBMwvtspf5uiNoRmsRAeWsHAw59WwyAwEYxeCKceijqHBPZCUgJVUJBASAms5rPi8qaCaMOPdbTkdF031ekk5eCGF0ExV5MRuHKBkL4eLkgSWHA1MzcX8qWlRGnbJlpuYN"></i><i data-s="JHF8VJfpSCRCDEuXbOtyo4lq0nCVJYexwottSyHE7VymT7aoDmGAW5RHSqTTWz1LASk91U4rJ+DwORpPcf05TlahRnJq6IPEsKGKs/UePVKcylRB/yymorSlJeTBWF4LkPEmZ/MraPUfwzYg/U29Lg5xVcgyWHCfauSSiYDSSLIW05kJOUkp7PkQ8OEpTOIDAdtSOIpXrqIQ4wDiWmw0SRn4LmOk3loUk5BMy/nLgkYwrpqhYHLzuZgPhnE+GI2SMFcwUcjKpoMVkEymLgAAxEpDHwWNurMJ3MwSNKRHn6MB8BhwU5lUoGzGKfjY8C1jAhzfGTks0OwGIiqoOsBjUxoEQDVFTZmyZoEMyBWLECsKIQAJDlxQoOMkJMCMNMPLCMBXQSRAAZX5hxgKdpcDwte5jSYKKAEBeRAwzORYIjJkpEsoHiK0rpCxxIpfdYfAtspEyjLyrqACUZUj0xUEz8MaELyQDGm6FaVdJWACi0QExeLdlnrzGQBiwoVAMWmWshxfxLpQdL5DmVZJrQwEFUJLLwAVkTaRPXYtVQstcs6IIzBFIPBySwtZcYDmBBX3QNRgQhaCkYgCZQ4CMCWc+hEytmkXU0KiUpgqBqjcELEwgBVNSHE1B4Sq4s5UiJQGKnUTCVIls44RCKoMA0BexL1nTqF7AoUOWjgTIEYFzJcMNQwCjYCQRJ8oDE+iyyJjDHjXkTLTkKwQww0HKLYKSMQwlRZ0ykN53/RHWGIhAUaijTF5r9qI4lZExBTUUzLjk4LjKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoQDtLDEsDSrRq2FAhqlJlDRgU5shZQHMQdFRYK//vkZA4N+cV3uwtZe3AAAA0gAAABMjXc4BXNAAAAADSCgAAEKhiov48BghFzQqwCrEnQfKNFQieRIBQ4KTKzDSMA0ZnAFy0nxUQCDq3FxYcLQigJcIBKumFhS3YNAXEKhuC4SRqTyulyyZHZJmL3UrVDVmoaoQOtnIYK6P9pUBbiqRBO1Kc8AuUdWJcg6NUxiHST07EssGjBakASYtyIXKjDiJkiifopjXjoO5QmwqT/F0F8XEvKnOOMoibnKoTzMtDqFuUhKmFSEnUaJNBgftq5VZyIE/zKRqYinESxfS6LU5ZrtIt7GcRnvTEUcV2f5eykMKhjHipDQ29RCvH4qkSo2W5YxwTOzvIKd5qxJF26IGfRd7ZhEEXJxM6dWS9L5usBxF1SBoqo0y4joH4qV8/CjORoJsPQd"></i><i data-s="hxGmXhBmwfZyIuHDVcYeFxs5/maTgajIphQRmAiqLE0xWGAuDTLgbMVgUyETQ48igmIiii2StiB6YtEbkCb4QdgccFcZA4RcjhpzNEjFiAKYDNJiV5tWgrEBW4xpgDRzJmzVhjXpV/A7IcUcTCxqeCkRmAqbzZGogksCjRjBYOHkRwHEC1BeZAcHHJeMIhECZvDI0KU4EQUBGFvl90OLxvOBAymqAVAivpTJPpaCYKE56lzhgFZSuy+q/F+F/TAiXeDBYsSBoEGB2ajwBKlHtYqUJfgFDgUPUqUxcsRgmyNUHhKSaYyYLPEUG0RzQ3fMusykdHIDkql6LGTZQRJMlnmNhBJG8vo/6PCRSaKDrIi2rcw4OKBXFTeaIpmqVwgSBAQR
+<i data-s="data:audio/mpeg;base64,//vkZA4A+Xp3vDNYe3AAAA0gAAABK23g861rDcAAADSAAAAEIPMQUFHiQV8tIHCQmmuwGq0Ys0QTRpLCiYaKTQ0TDG0BQStY4LCYComlwh3QTJVAqAqpY6FLoipAzJUKBjIQl2hwi6yLY0WBEkkcaR4FlLDNaQwOhdH6AJxNR/jESgapcjAOdAmTPGNIyVQo2Ev/TyKaGuGmkKUBzLd04gkcnDpZIC4VpuyI4+DTbGVjQ5wWoSONJCU88QxcoCRPQFGsLJoQFQiFt5BRJ7tDp8cRzvjxiGgfcNqYTxaz+T6DLghCjUKIVirSEzgjkwhKUPw7FUkuulGiUywRjzUSTJKh7Y/QteOJQnoidEsPYwjtT6qRKTQtmXa0+HGXtlbWBbTypms5Kd+iDdPJXIsXFSwGBFKFIFyAATTkdl1jRBxgJ2V5gFAJIm0LiVgCrzMkTGPgV8KLZlEJVOmkPGVYjxUIqIHGALmDLErkySwxKkHCTKqDOCwoMQHDCww6w1BQ0YIwVgy4k1KYwOA2awSbgAkYAoQCRpwATotwM2lNqDBz8yAg3JUGFmqmJUrAAc8ggMSXNQlZOk4Y4MGFjOgF1hY8BiM/AAwVMwQXuu8qrLeqnDhpdMpVggdVBHGGkhF7rAE0yE77Nya+/Snb+lzV1JuqBzUEKnlr6VVSULVINg5WtQZ4JfArKlTt2cKkcBnMYamz9QNkb3Sh/2+m43A6+lcO3FKWdd+Aod04kCUzm50dO+UqjcRiTvVI7D8Lf6jkVuxN0kW7WmK96Wzzsx19pTMQLOzVNZkVNLuyyXUEzTco4Clsfyh+IdjTF4bkDxSl/4FnI7DF6POVPwzONch6JXqrsy2PurNXLnyulp4LeKo/kGJiCmopmXHJwXGSqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoPSHKMHDKAQ6jC+5tYAYPKqEyJkFQjGmAYLMal//vkZA4P+cN4OwNZe3AAAA0gAAABMZ3a3g5rDcAAADSAAAAEAJNwhJgLohG7pmDETKErBMwvtspf5uiNoRmsRAeWsHAw59WwyAwEYxeCKceijqHBPZCUgJVUJBASAms5rPi8qaCaMOPdbTkdF031ekk5eCGF0ExV5
