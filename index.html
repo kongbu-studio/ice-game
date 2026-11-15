@@ -96,13 +96,37 @@ function boot(){
   function dispatch(target){
     try{
       var t=closest(target); if(!t) return;
-      if(t.id==='main-ice'){ if(BASE.doClick) BASE.doClick(); else miniFallback(t); return; }
+      if(t.id==='main-ice'){ press(); release(); if(BASE.doClick) BASE.doClick(); else miniFallback(t); return; }
       if(MAP[t.id]){ if(BASE.go) BASE.go(MAP[t.id]); else miniFallback(t); return; }
       if(t.getAttribute && t.getAttribute('data-i')!=null && BASE.use) BASE.use(t);
     }catch(e){
       try{ window.onerror(e.message||String(e),'',0,0,e); }catch(_){}
     }
   }
+  /* ---- press feedback: hold keeps it down; every tap pulses once ---- */
+  var iceEl=null, holding=false, pTimer=null;
+  function iceNode(){ return iceEl||(iceEl=document.getElementById('main-ice')); }
+  function press(){
+    var e=iceNode(); if(e) e.classList.add('pressed');
+    clearTimeout(pTimer);
+  }
+  function release(){
+    clearTimeout(pTimer);
+    pTimer=setTimeout(function(){
+      if(!holding){ var e=iceNode(); if(e) e.classList.remove('pressed'); }
+    },115);
+  }
+  function down(ev){
+    try{ var t=closest(ev.target); if(t&&t.id==='main-ice'){ holding=true; press(); } }catch(e){}
+  }
+  document.addEventListener('touchstart',down,true);
+  document.addEventListener('mousedown',down,true);
+  function up(){ holding=false; release(); }
+  document.addEventListener('touchend',up,true);
+  document.addEventListener('touchcancel',up,true);
+  document.addEventListener('mouseup',up,true);
+  document.addEventListener('mouseleave',up,true);
+
   window.__BTN_OK=true;
   })();
   /* Main logic: never binds a button. Fills BASE only after full init. */
@@ -113,6 +137,35 @@ function boot(){
   var S=0,C=0,K=0,L=0,T=null,P='main',rl=300,al=86400;
   var SV=document.getElementById('score-val'), CB=document.getElementById('combo');
   var D={skill:[],item:[],trophy:[]}, used={}, claimed={};
+
+  /* ---- local save: restore score / clicks / used skills / items / claimed trophies ---- */
+  var SAVE_KEY='bingbing_save_v1', restored=false, tickN=0;
+  try{
+    var raw=localStorage.getItem(SAVE_KEY);
+    if(raw){
+      var o=JSON.parse(raw);
+      if(typeof o.S==='number'&&isFinite(o.S)&&o.S>=0) S=o.S;
+      if(typeof o.K==='number'&&isFinite(o.K)&&o.K>=0) K=o.K;
+      if(o.used&&typeof o.used==='object') used=o.used;
+      if(o.claimed&&typeof o.claimed==='object') claimed=o.claimed;
+      if(typeof o.rl==='number'&&isFinite(o.rl)) rl=Math.max(0,Math.min(300,o.rl));
+      if(typeof o.al==='number'&&isFinite(o.al)) al=Math.max(0,Math.min(86400,o.al));
+      restored=(S>0||K>0||Object.keys(used).length>0||Object.keys(claimed).length>0);
+    }
+  }catch(e){}
+  var saveTimer=null;
+  function saveNow(){
+    try{
+      localStorage.setItem(SAVE_KEY,JSON.stringify({S:S,K:K,used:used,claimed:claimed,rl:rl,al:al}));
+    }catch(e){}
+  }
+  function save(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,120); }
+  try{
+    window.addEventListener('pagehide',saveNow);
+    window.addEventListener('beforeunload',saveNow);
+    document.addEventListener('visibilitychange',function(){ if(document.hidden) saveNow(); });
+  }catch(e){}
+
   
   /* built-in synth tones: needs NO external data */
   var ACX=null;
@@ -140,8 +193,8 @@ function boot(){
     }catch(e){}
   }
   function snd(k){
-    try{ if(window.SND && window.SND(k)!==false) return; }catch(e){}
-    beep(k);
+    /* original audio only: never play a synthetic substitute */
+    try{ if(window.SND) window.SND(k); }catch(e){}
   }
   
   try{
@@ -168,6 +221,9 @@ function boot(){
    '\u63a5\u4e0b\u6765 4 \u6b21\u70b9\u51fb\u5f97\u5206 \u00d72','\u4f7f\u7528\u65f6\u8fd4\u8fd8\u90e8\u5206\u6263\u9664\u5206\u6570','\u5355\u6b21\u70b9\u51fb\u6536\u76ca\u4e0a\u9650\u63d0\u9ad8 5 \u5206',
    '\u6bcf\u6b21\u70b9\u51fb\u968f\u673a +1~5 \u5206','\u6bcf\u70b9\u6ee1 12 \u6b21\u989d\u5916 +6 \u5206','\u6302\u7740\u4e0d\u52a8\u6bcf 12 \u79d2\u81ea\u52a8 +4 \u5206'
   ];
+  var TAGS=['flat','comboMul','crit','window','speed','streak','lucky','settle','charge',
+   'floor','auto','milestone','interest','first','burst','guard','double','refund','cap',
+   'lucky','streak','idle'];
   function names(a,b,n,first){
     var o=[];
     for(var i=0;i<n;i++){
@@ -192,7 +248,7 @@ function boot(){
         e.desc='\u7d2f\u8ba1\u70b9\u51fb\u51b0\u5757 '+e.req+' \u6b21 \u00b7 \u9886\u53d6\u5956\u52b1\uff1a+'+e.reward+' \u5206\uff08\u7b2c '+(i+1)+' \u9879\uff09';
       }else{
         e.req=(kind==='skill'&&i===0)?25:(kind==='item'&&i===0)?200:25+i*3+(i*7%12);
-        e.cost=e.req; e.used=!!used[e.name]; e.fx=FX[i%FX.length]; e.power=i;
+        e.cost=e.req; e.used=!!used[e.name]; e.fx=FX[i%FX.length]; e.tag=TAGS[i%TAGS.length]; e.power=i;
         e.desc='\u9700\u7d2f\u8ba1\u70b9\u51fb '+e.req+' \u6b21 \u00b7 \u4f7f\u7528\u6263\u9664 '+e.cost+' \u5206 \u00b7 \u6548\u679c\uff1a'+e.fx+'\uff08\u7b2c '+(i+1)+' \u9879\uff09';
       }
       arr.push(e);
@@ -207,8 +263,8 @@ function boot(){
     ['skill','item'].forEach(function(k){
       var a=D[k]||[];
       for(var i=0;i<a.length;i++){
-        var e=a[i]; if(!e.used||!e.fx) continue;
-        if(!best[e.fx]||e.power>best[e.fx].power) best[e.fx]=e;
+        var e=a[i]; if(!e.used||!e.tag) continue;
+        if(!best[e.tag]||e.power>best[e.tag].power) best[e.tag]=e;
       }
     });
     return best;
@@ -236,7 +292,7 @@ function boot(){
     if(w>0) autoT=setInterval(function(){ if(P==='main') hit(); },w);
   }
   function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function score(){ if(SV) SV.textContent=S; }
+  function score(){ if(SV) SV.textContent=S; save(); }
   function fmt(s){
     s=Math.max(0,s|0); var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
     function p(n){ return (n<10?'0':'')+n; }
@@ -301,14 +357,18 @@ function boot(){
     }catch(e){}
   }
   function hit(){
-    var now=Date.now(), dt=now-L;
-    C=(now-L<650)?C+1:1; L=now; K++;
+    var now=Date.now(), dt=now-L, F0=active();
+    C=(now-L<(F0.window||F0.guard?800:650))?C+1:1; L=now; K++;
     S+=gain({combo:C,dt:dt,k:K,score:S}); score();
     if(C>=2&&CB){ CB.textContent='\u00d7'+C; CB.className='show'; }
     snd('bing');
     clearTimeout(T);
     T=setTimeout(function(){
-      if(C>=2) snd('combo');
+      if(C>=2){
+        var F1=active();
+        if(F1.settle){ S+=C; score(); }
+        snd('combo');
+      }
       C=0; if(CB) CB.className='';
     },800);
   }
@@ -322,15 +382,16 @@ function boot(){
     }else{
       if(e.used||K<e.req||S<e.cost) return;
       S-=e.cost; e.used=true; used[e.name]=true;
-      if(e.fx==='refund') S+=Math.round(e.cost*0.2);
-      if(e.fx==='burst'){ burst=6; burstAdd=3; }
-      if(e.fx==='double') dbl=4;
+      if(e.tag==='refund') S+=Math.round(e.cost*0.2);
+      if(e.tag==='burst'){ burst=6; burstAdd=3; }
+      if(e.tag==='double') dbl=4;
       syncAuto();
     }
     score(); render();
   }
   setInterval(function(){
     rl--; al--;
+    if((++tickN%10)===0) saveNow();
     if(rl<=0){
       rl=300; build('skill',true); build('item',true);
       notice('\u6280\u80fd\u5df2\u5237\u65b0\uff0c5\u5206\u949f\u540e\u91cd\u65b0\u5237\u65b0'); notice('\u9053\u5177\u5df2\u5237\u65b0\uff0c5\u5206\u949f\u540e\u5237\u65b0');
@@ -342,6 +403,13 @@ function boot(){
   /* all init done -> publish into BASE */
   B.doClick=hit; B.go=go; B.use=use; B.notice=notice;
   score(); go('main');
+  try{
+    syncAuto(); saveNow();
+    setInterval(function(){ if(P==='main'&&active().idle){ S+=4; score(); } },12000);
+  }catch(e){}
+  if(restored){
+    try{ notice('\u5DF2\u6062\u590D\u4E0A\u6B21\u8FDB\u5EA6\uFF1A\uD83E\uDDCA'+S+' \u00B7 \u70B9\u51FB '+K+' \u6B21'); }catch(e){}
+  }
   window.__OK=true;
   /* Render sound status once the DOM exists. */
   try{
@@ -353,8 +421,8 @@ function boot(){
     }
   }catch(e){}
   })();
-  /* Sound glue: prefers the inline original bytes; if the file was truncated,
-   it loads the same original mp3 files from this folder. Status is shown on screen. */
+  /* Sound glue: ONLY the two original files the user supplied.
+   No inline data, no synth substitute. Missing file is named on screen. */
   (function(){
   "use strict";
   function status(ok,msg){
@@ -364,41 +432,38 @@ function boot(){
       if(el){ el.className=ok?'ok':'bad'; el.textContent=msg; }
     }catch(e){}
   }
-  function join(id){
-    var ns=document.querySelectorAll('#'+id+' i'), o='';
-    for(var i=0;i<ns.length;i++) o+=ns[i].getAttribute('data-s');
-    return o;
-  }
-  var B=join('snd1'), C=join('snd2');
-  var inline=(B.length===53783 && C.length===382743);
-  var srcB, srcC, label;
-  if(inline){ srcB=B; srcC=C; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D \u2713'; }
-  else{ srcB='bing.mp3'; srcC='combo.mp3'; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D\uFF08\u5916\u94FE\uFF09 \u2713'; }
-  function pool(src,n,k){
+  var F={bing:'bing.mp3',combo:'combo.mp3'};
+  var bad={bing:false,combo:false};
+  function pool(f,k,n){
     var p=[];
     for(var i=0;i<n;i++){
       try{
-        var a=new Audio(); a.src=src; a.preload='auto';
-        a.addEventListener('error',function(){ bad[k]=true; });
+        var a=new Audio(); a.src=f; a.preload='auto';
+        a.addEventListener('error',function(){ bad[k]=true; report(); });
         p.push(a);
       }catch(e){}
     }
     return p;
   }
-  var bad={bing:false,combo:false};
-  var PB=pool(srcB,5,'bing'), PC=pool(srcC,3,'combo'), ib=0, ic=0, failed=0;
-  status(true,label);
+  function report(){
+    if(bad.bing||bad.combo){
+      status(false,'\u539F\u7248\u97F3\u6548\u672A\u52A0\u8F7D\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u7528 Upload files \u4E0A\u4F20\u5230\u540C\u4E00\u76EE\u5F55');
+    }
+  }
+  var PB=pool(F.bing,'bing',5), PC=pool(F.combo,'combo',3), ib=0, ic=0, failed=0;
+  status(true,'\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D \u2713');
+  setTimeout(report,1200);
   window.SND=function(k){
-    if(bad[k]){ status(false,'\u539F\u7248\u97F3\u6548\u6587\u4EF6\u6CA1\u627E\u5230\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20'); return false; }
+    if(bad[k]){ report(); return false; }
     try{
       var p=(k==='bing')?PB:PC, a=null;
       if(p.length) a=p[(k==='bing'?(++ib):(++ic))%p.length];
-      if(!a) a=new Audio(k==='bing'?srcB:srcC);
+      if(!a) a=new Audio(F[k]);
       a.pause(); if(a.readyState>0) a.currentTime=0;
       var q=a.play();
       if(q&&q.catch) q.catch(function(){
         failed++;
-        if(failed>=2) status(false,'\u539F\u7248\u97F3\u6548\u64AD\u653E\u5931\u8D25\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20');
+        if(failed>=2) status(false,'\u6D4F\u89C8\u5668\u62E6\u4E86\u64AD\u653E\uFF1A\u5148\u624B\u70B9\u4E00\u4E0B\u5C4F\u5E55\uFF0C\u518D\u70B9\u51B0\u5757');
       });
       return true;
     }catch(e){ return false; }
@@ -478,7 +543,11 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
   align-items:center;justify-content:center;pointer-events:none;}
 #ice-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;}
 #main-ice{font-size:150px;line-height:1;cursor:pointer;pointer-events:auto;
-  filter:drop-shadow(0 0 26px rgba(90,190,255,.55));animation:float 2.4s ease-in-out infinite;}
+  filter:drop-shadow(0 0 26px rgba(90,190,255,.55));animation:float 2.4s ease-in-out infinite;
+  transition:transform .11s cubic-bezier(.2,.9,.3,1.45),filter .13s ease;}
+#main-ice:active,#main-ice.pressed{transform:scale(.74) translateY(9px);
+  filter:drop-shadow(0 0 9px rgba(90,190,255,.30));}
+#ice-wrap:active #combo{transform:translateY(3px);}
 @keyframes float{0%,100%{translate:0 0;}50%{translate:0 -14px;}}
 #combo{position:absolute;left:100%;top:6%;margin-left:-10px;color:var(--red);
   font-size:36px;font-weight:900;font-style:italic;text-shadow:0 0 14px rgba(255,59,78,.7);
@@ -519,9 +588,10 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 .list-bottom{padding:14px;text-align:center;font-size:13px;color:var(--b4);border-top:1px dashed var(--line);pointer-events:none;}
 
 /* 底部声明 */
-#snd-status{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:3300;
+#snd-status{position:fixed;top:48px;left:50%;transform:translateX(-50%);z-index:3300;
   padding:5px 14px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.5px;
-  pointer-events:none;white-space:nowrap;display:none;}
+  pointer-events:none;display:none;max-width:92vw;text-align:center;line-height:1.5;
+  white-space:normal;word-break:break-all;font-size:12px;}
 #snd-status.ok{display:block;background:rgba(20,90,60,.82);color:#b8ffdc;border:1px solid rgba(120,255,190,.5);}
 #snd-status.bad{display:block;background:rgba(150,50,20,.92);color:#ffe0c0;border:1px solid rgba(255,170,110,.6);}
 #site-note{position:fixed;left:0;right:0;bottom:0;z-index:3200;padding:12px 18px 14px;
@@ -529,6 +599,7 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
   text-shadow:0 0 12px rgba(60,160,255,.6);
   background:linear-gradient(0deg,rgba(3,16,44,.95) 0%,rgba(3,16,44,.72) 62%,rgba(3,16,44,0) 100%);
   pointer-events:none;}
+
 </style>
 </head>
 <body>
@@ -544,44 +615,4 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
   <div id="score-display" class="glass">🧊:<b id="score-val">0</b></div>
 </div>
 
-<div id="notices"></div>
-
-<section id="main-screen">
-  <div id="ice-wrap">
-    <div id="main-ice">🧊</div>
-    <div id="combo"></div>
-  </div>
-  <div class="hint">可以点击这个冰块来进行冰冰冰</div>
-</section>
-
-<div id="bottom-left">
-  <button class="bl-btn glass" id="skill-btn" type="button">技能</button>
-  <button class="bl-btn glass" id="item-btn" type="button">道具</button>
-</div>
-
-<button id="trophy-btn" type="button" class="glass" aria-label="成就">
-  <div class="t-ice">🧊</div><div class="t-label">成就</div>
-</button>
-
-<section class="list-screen" id="screen-skill">
-  <div class="list-header"><h2>技能</h2><div class="list-sub" id="sub-skill"></div></div>
-  <div class="list-scroll" id="scroll-skill"></div>
-  <div class="list-bottom" id="bottom-skill"></div>
-</section>
-<section class="list-screen" id="screen-item">
-  <div class="list-header"><h2>道具</h2><div class="list-sub" id="sub-item"></div></div>
-  <div class="list-scroll" id="scroll-item"></div>
-  <div class="list-bottom" id="bottom-item"></div>
-</section>
-<section class="list-screen" id="screen-trophy">
-  <div class="list-header"><h2>成就</h2><div class="list-sub" id="sub-trophy"></div></div>
-  <div class="list-scroll" id="scroll-trophy"></div>
-  <div class="list-bottom" id="bottom-trophy"></div>
-</section>
-
-<div id="site-note">本网站由奶油不吃糖果 B 站作者制作，请勿模仿，请勿二创，请勿二次消费，可免费游玩。</div>
-
-<!-- ORIGINAL audio, byte-for-byte, inline as base64 in hidden HTML attributes.
-     Not inside any script, so editors do not flag the script block. -->
-<div id="snd1" style="display:none">
-<i data-s="data:audio/mpeg;base64,//vkZA4A+Xp3vDNYe3AAAA0gAAABK23g861rDcAAADSAAAAEIPMQUFHiQV8tIHCQmmuwGq0Ys0QTRpLCiYaKTQ0TDG0BQStY4LCYComlwh3QTJVAqAqpY6FLoipAzJUKBjIQl2hwi6yLY0WBEkkcaR4FlLDNaQwOhdH6AJxNR/jESgapcjAOdAmTPGNIyVQo2Ev/TyKaGuGmkKUBzLd04gkcnDpZIC4VpuyI4+DTbGVjQ5wWoSONJCU88QxcoCRPQFGsLJoQFQiFt5BRJ7tDp8cRzvjxiGgfcNqYTxaz+T6DLghCjUKIVirSEzgjkwhKUPw7FUkuulGiUywRjzUSTJKh7Y/QteOJQnoidEsPYwjtT6qRKTQtmXa0+HGXtlbWBbTypms5Kd+iDdPJXIsXFSwGBFKFIFyAATTkdl1jRBxgJ2V5gFAJIm0LiVgCrzMkTGPgV8KLZlEJVOmkPGVYjxUIqIHGALmDLErkySwxKkHCTKqDOCwoMQHDCww6w1BQ0YIwVgy4k1KYwOA2awSbgAkYAoQCRpwATotwM2lNqDBz8yAg3JUGFmqmJUrAAc8ggMSXNQlZOk4Y4MGFjOgF1hY8BiM/AAwVMwQXuu8qrLeqnDhpdMpVggdVBHGGkhF7rAE0yE77Nya+/Snb+lzV1JuqBzUEKnlr6VVSULVINg5WtQZ4JfArKlTt2cKkcBnMYamz9QNkb3Sh/2+m43A6+lcO3FKWdd+Aod04kCUzm50dO+UqjcRiTvVI7D8Lf6jkVuxN0kW7WmK96Wzzsx19pTMQLOzVNZkVNLuyyXUEzTco4Clsfyh+IdjTF4bkDxSl/4FnI7DF6POVPwzONch6JXqrsy2PurNXLnyulp4LeKo/kGJiCmopmXHJwXGSqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoPSHKMHDKAQ6jC+5tYAYPKqEyJkFQjGmAYLMal//vkZA4P+cN4OwNZe3AAAA0gAAABMZ3a3g5rDcAAADSAAAAEAJNwhJgLohG7pmDETKErBMwvtspf5uiNoRmsRAeWsHAw59WwyAwEYxeCKceijqHBPZCUgJVUJBASAms5rPi8qaCaMOPdbTkdF031ekk5eCGF0ExV5
+<div id="notices"
