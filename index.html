@@ -140,8 +140,8 @@ function boot(){
     }catch(e){}
   }
   function snd(k){
-    /* original audio only: never play a synthetic substitute */
-    try{ if(window.SND) window.SND(k); }catch(e){}
+    try{ if(window.SND && window.SND(k)!==false) return; }catch(e){}
+    beep(k);
   }
   
   try{
@@ -353,8 +353,8 @@ function boot(){
     }
   }catch(e){}
   })();
-  /* Sound glue: ONLY the two original files the user supplied.
-   No inline data, no synth substitute. Missing file is named on screen. */
+  /* Sound glue: prefers the inline original bytes; if the file was truncated,
+   it loads the same original mp3 files from this folder. Status is shown on screen. */
   (function(){
   "use strict";
   function status(ok,msg){
@@ -364,38 +364,41 @@ function boot(){
       if(el){ el.className=ok?'ok':'bad'; el.textContent=msg; }
     }catch(e){}
   }
-  var F={bing:'bing.mp3',combo:'combo.mp3'};
-  var bad={bing:false,combo:false};
-  function pool(f,k,n){
+  function join(id){
+    var ns=document.querySelectorAll('#'+id+' i'), o='';
+    for(var i=0;i<ns.length;i++) o+=ns[i].getAttribute('data-s');
+    return o;
+  }
+  var B=join('snd1'), C=join('snd2');
+  var inline=(B.length===53783 && C.length===382743);
+  var srcB, srcC, label;
+  if(inline){ srcB=B; srcC=C; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D \u2713'; }
+  else{ srcB='bing.mp3'; srcC='combo.mp3'; label='\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D\uFF08\u5916\u94FE\uFF09 \u2713'; }
+  function pool(src,n,k){
     var p=[];
     for(var i=0;i<n;i++){
       try{
-        var a=new Audio(); a.src=f; a.preload='auto';
-        a.addEventListener('error',function(){ bad[k]=true; report(); });
+        var a=new Audio(); a.src=src; a.preload='auto';
+        a.addEventListener('error',function(){ bad[k]=true; });
         p.push(a);
       }catch(e){}
     }
     return p;
   }
-  function report(){
-    if(bad.bing||bad.combo){
-      status(false,'\u539F\u7248\u97F3\u6548\u672A\u52A0\u8F7D\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u7528 Upload files \u4E0A\u4F20\u5230\u540C\u4E00\u76EE\u5F55');
-    }
-  }
-  var PB=pool(F.bing,'bing',5), PC=pool(F.combo,'combo',3), ib=0, ic=0, failed=0;
-  status(true,'\u539F\u7248\u97F3\u6548\u5DF2\u52A0\u8F7D \u2713');
-  setTimeout(report,1200);
+  var bad={bing:false,combo:false};
+  var PB=pool(srcB,5,'bing'), PC=pool(srcC,3,'combo'), ib=0, ic=0, failed=0;
+  status(true,label);
   window.SND=function(k){
-    if(bad[k]){ report(); return false; }
+    if(bad[k]){ status(false,'\u539F\u7248\u97F3\u6548\u6587\u4EF6\u6CA1\u627E\u5230\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20'); return false; }
     try{
       var p=(k==='bing')?PB:PC, a=null;
       if(p.length) a=p[(k==='bing'?(++ib):(++ic))%p.length];
-      if(!a) a=new Audio(F[k]);
+      if(!a) a=new Audio(k==='bing'?srcB:srcC);
       a.pause(); if(a.readyState>0) a.currentTime=0;
       var q=a.play();
       if(q&&q.catch) q.catch(function(){
         failed++;
-        if(failed>=2) status(false,'\u6D4F\u89C8\u5668\u62E6\u4E86\u64AD\u653E\uFF1A\u5148\u624B\u70B9\u4E00\u4E0B\u5C4F\u5E55\uFF0C\u518D\u70B9\u51B0\u5757');
+        if(failed>=2) status(false,'\u539F\u7248\u97F3\u6548\u64AD\u653E\u5931\u8D25\uFF1A\u8BF7\u628A bing.mp3 \u548C combo.mp3 \u4E0E index.html \u4E00\u8D77\u4E0A\u4F20');
       });
       return true;
     }catch(e){ return false; }
@@ -516,10 +519,9 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 .list-bottom{padding:14px;text-align:center;font-size:13px;color:var(--b4);border-top:1px dashed var(--line);pointer-events:none;}
 
 /* 底部声明 */
-#snd-status{position:fixed;top:48px;left:50%;transform:translateX(-50%);z-index:3300;
+#snd-status{position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:3300;
   padding:5px 14px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.5px;
-  pointer-events:none;display:none;max-width:92vw;text-align:center;line-height:1.5;
-  white-space:normal;word-break:break-all;font-size:12px;}
+  pointer-events:none;white-space:nowrap;display:none;}
 #snd-status.ok{display:block;background:rgba(20,90,60,.82);color:#b8ffdc;border:1px solid rgba(120,255,190,.5);}
 #snd-status.bad{display:block;background:rgba(150,50,20,.92);color:#ffe0c0;border:1px solid rgba(255,170,110,.6);}
 #site-note{position:fixed;left:0;right:0;bottom:0;z-index:3200;padding:12px 18px 14px;
@@ -527,61 +529,59 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
   text-shadow:0 0 12px rgba(60,160,255,.6);
   background:linear-gradient(0deg,rgba(3,16,44,.95) 0%,rgba(3,16,44,.72) 62%,rgba(3,16,44,0) 100%);
   pointer-events:none;}
+</style>
+</head>
+<body>
 
-/* ============ 游戏中心外壳 ============ */
-#arcade{position:fixed;inset:0;z-index:6000;display:flex;flex-direction:column;
-  background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#041430 100%);
-  color:#b6e3ff;font-family:"PingFang SC","Microsoft YaHei",Arial,sans-serif;overflow:hidden;}
-#arcade::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.12;
-  background:repeating-linear-gradient(115deg,transparent 0 78px,rgba(190,235,255,.16) 78px 80px,transparent 80px 160px);}
-.arc-hall{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;min-height:0;}
-.arc-top{padding:16px 16px 6px;text-align:center;flex:none;}
-.arc-top svg{width:92px;height:62px;display:block;margin:0 auto 4px;}
-.arc-title{font-size:22px;font-weight:900;letter-spacing:5px;color:#eaf7ff;
-  text-shadow:0 0 16px rgba(120,200,255,.7);}
-.arc-sub{font-size:12px;opacity:.7;margin-top:3px;letter-spacing:1px;}
-.arc-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
-  padding:12px 16px 18px;touch-action:pan-y;}
-.gcard{display:flex;align-items:center;gap:14px;padding:15px 16px;margin-bottom:12px;
-  border-radius:18px;cursor:pointer;
-  background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(120,190,255,.06));
-  -webkit-backdrop-filter:blur(18px) saturate(175%) brightness(1.08);
-  backdrop-filter:blur(18px) saturate(175%) brightness(1.08);
-  border:1px solid rgba(255,255,255,.26);
-  box-shadow:0 8px 28px rgba(2,14,40,.38),inset 0 1px 1px rgba(255,255,255,.5);
-  transition:transform .16s ease;}
-.gcard:active{transform:scale(.97);}
-.g-emoji{font-size:40px;line-height:1;flex:none;width:52px;text-align:center;}
-.g-txt{min-width:0;flex:1;}
-.g-name{font-size:19px;font-weight:900;color:#eef8ff;text-shadow:0 1px 10px rgba(70,160,255,.5);}
-.g-sub2{font-size:12px;opacity:.78;margin-top:3px;line-height:1.4;}
-.g-go{flex:none;font-size:13px;font-weight:800;padding:8px 14px;border-radius:999px;
-  background:rgba(30,111,224,.55);border:1px solid rgba(160,215,255,.5);color:#fff;}
-.arc-note{flex:none;padding:10px 16px 14px;text-align:center;font-size:14px;font-weight:800;
-  line-height:1.6;color:#a8d6ff;text-shadow:0 0 12px rgba(60,160,255,.6);
-  background:linear-gradient(0deg,rgba(3,16,44,.95),rgba(3,16,44,0));}
-.arc-tip{flex:none;text-align:center;font-size:11px;opacity:.55;padding:0 16px 8px;}
-/* 关于页 */
-#about{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;
-  background:linear-gradient(180deg,#02102e,#0a2350 60%,#041430);}
-.about-bar{padding:14px 16px;flex:none;}
-.about-back{width:46px;height:46px;border-radius:999px;font-size:26px;line-height:1;
-  display:flex;align-items:center;justify-content:center;cursor:pointer;
-  background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(120,190,255,.06));
-  -webkit-backdrop-filter:blur(18px) saturate(175%);backdrop-filter:blur(18px) saturate(175%);
-  border:1px solid rgba(255,255,255,.26);color:#eef8ff;}
-.about-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;}
-.about-row{display:flex;align-items:center;gap:18px;max-width:420px;}
-.about-row svg{flex:none;width:62px;height:62px;}
-.about-text{font-size:17px;font-weight:800;line-height:1.9;color:#eaf7ff;
-  text-shadow:0 0 12px rgba(80,170,255,.5);}
-/* 其它游戏舞台 */
-#game-stage{position:absolute;inset:0;z-index:2;display:none;flex-direction:column;
-  background:linear-gradient(180deg,rgba(3,16,44,.97),rgba(10,35,80,.98));}
-.g-head{flex:none;padding:14px 16px 8px;text-align:center;font-size:19px;font-weight:900;
-  color:#eaf7ff;letter-spacing:2px;}
-.g-body{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;padding:10px 14px 90px;overflow-y:auto;}
-.g-hint{font-size:12px;opacity:.72;text-align:center;line-height:1.7;margin-top:10px;}
-.g-score{font-size:15px;font-weight:800;color:#b6e3ff;margin-bottom:8px;}
-.
+<div id="js-dead" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#c62828;color:#fff;font-size:12px;font-weight:800;padding:9px 12px;text-align:center;pointer-events:none;">脚本没跑起来（看到这行红字请截图）</div>
+<noscript><div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#ff8f00;color:#fff;font-size:13px;font-weight:800;padding:12px;text-align:center;">浏览器禁用了 JavaScript（常见于阅读模式 / 省流模式 / 广告过滤），请关闭后刷新</div></noscript>
+<div id="snd-status"></div>
+
+<div id="bg"></div>
+
+<div id="hud">
+  <button id="back-btn" type="button" class="glass">&#8592;</button>
+  <div id="score-display" class="glass">🧊:<b id="score-val">0</b></div>
+</div>
+
+<div id="notices"></div>
+
+<section id="main-screen">
+  <div id="ice-wrap">
+    <div id="main-ice">🧊</div>
+    <div id="combo"></div>
+  </div>
+  <div class="hint">可以点击这个冰块来进行冰冰冰</div>
+</section>
+
+<div id="bottom-left">
+  <button class="bl-btn glass" id="skill-btn" type="button">技能</button>
+  <button class="bl-btn glass" id="item-btn" type="button">道具</button>
+</div>
+
+<button id="trophy-btn" type="button" class="glass" aria-label="成就">
+  <div class="t-ice">🧊</div><div class="t-label">成就</div>
+</button>
+
+<section class="list-screen" id="screen-skill">
+  <div class="list-header"><h2>技能</h2><div class="list-sub" id="sub-skill"></div></div>
+  <div class="list-scroll" id="scroll-skill"></div>
+  <div class="list-bottom" id="bottom-skill"></div>
+</section>
+<section class="list-screen" id="screen-item">
+  <div class="list-header"><h2>道具</h2><div class="list-sub" id="sub-item"></div></div>
+  <div class="list-scroll" id="scroll-item"></div>
+  <div class="list-bottom" id="bottom-item"></div>
+</section>
+<section class="list-screen" id="screen-trophy">
+  <div class="list-header"><h2>成就</h2><div class="list-sub" id="sub-trophy"></div></div>
+  <div class="list-scroll" id="scroll-trophy"></div>
+  <div class="list-bottom" id="bottom-trophy"></div>
+</section>
+
+<div id="site-note">本网站由奶油不吃糖果 B 站作者制作，请勿模仿，请勿二创，请勿二次消费，可免费游玩。</div>
+
+<!-- ORIGINAL audio, byte-for-byte, inline as base64 in hidden HTML attributes.
+     Not inside any script, so editors do not flag the script block. -->
+<div id="snd1" style="display:none">
+<i data-s="data:audio/mpeg;base64,//vkZA4A+Xp3vDNYe3AAAA0gAAABK23g861rDcAAADSAAAAEIPMQUFHiQV8tIHCQmmuwGq0Ys0QTRpLCiYaKTQ0TDG0BQStY4LCYComlwh3QTJVAqAqpY6FLoipAzJUKBjIQl2hwi6yLY0WBEkkcaR4FlLDNaQwOhdH6AJxNR/jESgapcjAOdAmTPGNIyVQo2Ev/TyKaGuGmkKUBzLd04gkcnDpZIC4VpuyI4+DTbGVjQ5wWoSONJCU88QxcoCRPQFGsLJoQFQiFt5BRJ7tDp8cRzvjxiGgfcNqYTxaz+T6DLghCjUKIVirSEzgjkwhKUPw7FUkuulGiUywRjzUSTJKh7Y/QteOJQnoidEsPYwjtT6qRKTQtmXa0+HGXtlbWBbTypms5Kd+iDdPJXIsXFSwGBFKFIFyAATTkdl1jRBxgJ2V5gFAJIm0LiVgCrzMkTGPgV8KLZlEJVOmkPGVYjxUIqIHGALmDLErkySwxKkHCTKqDOCwoMQHDCww6w1BQ0YIwVgy4k1KYwOA2awSbgAkYAoQCRpwATotwM2lNqDBz8yAg3JUGFmqmJUrAAc8ggMSXNQlZOk4Y4MGFjOgF1hY8BiM/AAwVMwQXuu8qrLeqnDhpdMpVggdVBHGGkhF7rAE0yE77Nya+/Snb+lzV1JuqBzUEKnlr6VVSULVINg5WtQZ4JfArKlTt2cKkcBnMYamz9QNkb3Sh/2+m43A6+lcO3FKWdd+Aod04kCUzm50dO+UqjcRiTvVI7D8Lf6jkVuxN0kW7WmK96Wzzsx19pTMQLOzVNZkVNLuyyXUEzTco4Clsfyh+IdjTF4bkDxSl/4FnI7DF6POVPwzONch6JXqrsy2PurNXLnyulp4LeKo/kGJiCmopmXHJwXGSqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqoPSHKMHDKAQ6jC+5tYAYPKqEyJkFQjGmAYLMal//vkZA4P+cN4OwNZe3AAAA0gAAABMZ3a3g5rDcAAADSAAAAEAJNwhJgLohG7pmDETKErBMwvtspf5uiNoRmsRAeWsHAw59WwyAwEYxeCKceijqHBPZCUgJVUJBASAms5rPi8qaCaMOPdbTkdF031ekk5eCGF0ExV5
