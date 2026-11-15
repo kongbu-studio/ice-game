@@ -474,10 +474,37 @@ function boot(){
 function hideDead(){
   try{ var d=document.getElementById('js-dead'); if(d) d.style.display='none'; }catch(e){}
 }
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded',function(){ hideDead(); boot(); });
-}else{ hideDead(); boot(); }
-window.addEventListener('load',hideDead);
+/* ---- self-healing DOM: if the file was truncated mid-paste, rebuild what is missing ---- */
+  function ensureDOM(){
+    var P=[
+      ['bg','<div id="bg"></div>'],
+      ['hud','<div id="hud"><button id="back-btn" type="button" class="glass">&#8592;</button><div id="score-display" class="glass">🧊:<b id="score-val">0</b></div></div>'],
+      ['notices','<div id="notices"></div>'],
+      ['snd-status','<div id="snd-status"></div>'],
+      ['main-screen','<section id="main-screen"><div id="ice-wrap"><div id="main-ice">🧊</div><div id="combo"></div></div><div class="hint">可以点击这个冰块来进行冰冰冰</div></section>'],
+      ['bottom-left','<div id="bottom-left"><button class="bl-btn glass" id="skill-btn" type="button">技能</button><button class="bl-btn glass" id="item-btn" type="button">道具</button></div>'],
+      ['trophy-btn','<button id="trophy-btn" type="button" class="glass" aria-label="成就"><div class="t-ice">🧊</div><div class="t-label">成就</div></button>'],
+      ['screen-skill','<section class="list-screen" id="screen-skill"><div class="list-header"><h2>技能</h2><div class="list-sub" id="sub-skill"></div></div><div class="list-scroll" id="scroll-skill"></div><div class="list-bottom" id="bottom-skill"></div></section>'],
+      ['screen-item','<section class="list-screen" id="screen-item"><div class="list-header"><h2>道具</h2><div class="list-sub" id="sub-item"></div></div><div class="list-scroll" id="scroll-item"></div><div class="list-bottom" id="bottom-item"></div></section>'],
+      ['screen-trophy','<section class="list-screen" id="screen-trophy"><div class="list-header"><h2>成就</h2><div class="list-sub" id="sub-trophy"></div></div><div class="list-scroll" id="scroll-trophy"></div><div class="list-bottom" id="bottom-trophy"></div></section>'],
+      ['site-note','<div id="site-note">本网站由奶油不吃糖果 B 站作者制作，请勿模仿，请勿二创，请勿二次消费，可免费游玩。</div>']
+    ];
+    var add='';
+    for(var i=0;i<P.length;i++) if(!document.getElementById(P[i][0])) add+=P[i][1];
+    if(add && document.body) document.body.insertAdjacentHTML('beforeend',add);
+  }
+  function start(){
+    try{ ensureDOM(); }catch(e){}
+    hideDead(); boot();
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',start);
+    /* some webviews fire load without DCL on a truncated document */
+    window.addEventListener('load',function(){
+      if(!document.getElementById('main-ice')) start();
+    });
+  }else{ start(); }
+  window.addEventListener('load',hideDead);
 })();
 </script>
 
@@ -577,42 +604,4 @@ body{background:linear-gradient(180deg,#02102e 0%,#092250 38%,#0d3480 68%,#04143
 .item-name{font-size:16px;font-weight:800;color:var(--b5);margin-bottom:5px;}
 .item-desc{font-size:12px;line-height:1.6;color:var(--b4);margin-bottom:10px;}
 .item-btn{min-width:112px;padding:10px 18px;border-radius:14px;font-size:13px;font-weight:800;}
-.item-btn.locked{background:rgba(40,70,120,.30);color:#8aa6c8;border-color:rgba(255,255,255,.14);}
-.item-btn.ready{background:linear-gradient(135deg,rgba(50,140,255,.62),rgba(20,90,220,.38));
-  border-color:rgba(160,215,255,.62);color:#ffffff;}
-.item-btn.active{background:linear-gradient(135deg,rgba(39,192,122,.55),rgba(15,120,75,.36));
-  border-color:rgba(120,255,190,.55);color:#eafff4;}
-.item-btn.claimed{background:rgba(110,130,160,.32);color:#d5e3f5;}
-.item-btn.notenough{background:rgba(190,50,80,.38);border-color:rgba(255,150,175,.42);color:#ffc7d4;}
-.item-btn:disabled{cursor:default;opacity:1;}
-.list-bottom{padding:14px;text-align:center;font-size:13px;color:var(--b4);border-top:1px dashed var(--line);pointer-events:none;}
-
-/* 底部声明 */
-#snd-status{position:fixed;top:48px;left:50%;transform:translateX(-50%);z-index:3300;
-  padding:5px 14px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.5px;
-  pointer-events:none;display:none;max-width:92vw;text-align:center;line-height:1.5;
-  white-space:normal;word-break:break-all;font-size:12px;}
-#snd-status.ok{display:block;background:rgba(20,90,60,.82);color:#b8ffdc;border:1px solid rgba(120,255,190,.5);}
-#snd-status.bad{display:block;background:rgba(150,50,20,.92);color:#ffe0c0;border:1px solid rgba(255,170,110,.6);}
-#site-note{position:fixed;left:0;right:0;bottom:0;z-index:3200;padding:12px 18px 14px;
-  text-align:center;color:#a8d6ff;font-size:16px;font-weight:800;line-height:1.65;letter-spacing:.3px;
-  text-shadow:0 0 12px rgba(60,160,255,.6);
-  background:linear-gradient(0deg,rgba(3,16,44,.95) 0%,rgba(3,16,44,.72) 62%,rgba(3,16,44,0) 100%);
-  pointer-events:none;}
-
-</style>
-</head>
-<body>
-
-<div id="js-dead" style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#c62828;color:#fff;font-size:12px;font-weight:800;padding:9px 12px;text-align:center;pointer-events:none;">脚本没跑起来（看到这行红字请截图）</div>
-<noscript><div style="position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#ff8f00;color:#fff;font-size:13px;font-weight:800;padding:12px;text-align:center;">浏览器禁用了 JavaScript（常见于阅读模式 / 省流模式 / 广告过滤），请关闭后刷新</div></noscript>
-<div id="snd-status"></div>
-
-<div id="bg"></div>
-
-<div id="hud">
-  <button id="back-btn" type="button" class="glass">&#8592;</button>
-  <div id="score-display" class="glass">🧊:<b id="score-val">0</b></div>
-</div>
-
-<div id="notices"
+.item-btn.locked{background:rgba(40,70,120,.30);color:#8aa6c8;border-color:rgba(255,255,255,.14)
